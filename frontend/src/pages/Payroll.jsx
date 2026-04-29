@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import api from "../api/client";
 import { useAuth } from "../context/AuthContext.jsx";
 
@@ -8,28 +8,98 @@ const Payroll = () => {
   const [selectedEmployee, setSelectedEmployee] = useState(user.employee?._id || "");
   const [payroll, setPayroll] = useState([]);
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [processing, setProcessing] = useState(false);
   const canProcess = ["Admin", "HR Manager"].includes(user.role);
 
-  useEffect(() => {
-    if (canProcess) api.get("/employees").then((response) => setEmployees(response.data));
+  const loadEmployees = useCallback(() => {
+    if (!canProcess) return;
+
+    api
+      .get("/employees")
+      .then((response) => setEmployees(response.data))
+      .catch((err) => setError(err.response?.data?.message || "Unable to load employees"));
   }, [canProcess]);
 
-  useEffect(() => {
-    if (selectedEmployee) api.get(`/payroll/${selectedEmployee}`).then((response) => setPayroll(response.data));
+  const loadPayroll = useCallback((silent = false) => {
+    if (!selectedEmployee) {
+      setPayroll([]);
+      return;
+    }
+
+    if (!silent) setLoading(true);
+    setError("");
+    api
+      .get(`/payroll/${selectedEmployee}`)
+      .then((response) => setPayroll(response.data))
+      .catch((err) => setError(err.response?.data?.message || "Unable to load payroll history"))
+      .finally(() => {
+        if (!silent) setLoading(false);
+      });
   }, [selectedEmployee]);
+
+  useEffect(() => {
+    loadEmployees();
+    const timer = window.setInterval(loadEmployees, 20000);
+    return () => window.clearInterval(timer);
+  }, [loadEmployees]);
+
+  useEffect(() => {
+    loadPayroll();
+    const timer = window.setInterval(() => loadPayroll(true), 15000);
+    return () => window.clearInterval(timer);
+  }, [loadPayroll]);
 
   const employeeOptions = useMemo(() => (canProcess ? employees : [user.employee]).filter(Boolean), [canProcess, employees, user.employee]);
 
   const processPayroll = async () => {
-    await api.post("/payroll/process", { month });
-    if (selectedEmployee) {
-      const response = await api.get(`/payroll/${selectedEmployee}`);
-      setPayroll(response.data);
+    setMessage("");
+    setError("");
+    setProcessing(true);
+    try {
+      const response = await api.post("/payroll/process", { month });
+      setMessage(`Payroll processed for ${response.data.count} employees`);
+      loadPayroll(true);
+    } catch (err) {
+      setError(err.response?.data?.message || "Unable to process payroll");
+    } finally {
+      setProcessing(false);
     }
   };
 
   const downloadPayslip = (item) => {
-    const html = `<html><body><h1>Payslip ${item.month}</h1><p>Employee: ${item.employee.name}</p><p>Basic: ${item.basicSalary}</p><p>Allowances: ${item.allowances}</p><p>Deductions: ${item.deductions}</p><h2>Net Salary: ${item.netSalary}</h2></body></html>`;
+    const html = `
+      <html>
+        <head>
+          <title>PeopleCore HR Payslip ${item.month}</title>
+          <style>
+            body { font-family: Arial, sans-serif; color: #111827; padding: 32px; }
+            .header { border-bottom: 2px solid #2563eb; padding-bottom: 14px; margin-bottom: 22px; }
+            h1 { margin: 0; }
+            table { width: 100%; border-collapse: collapse; margin-top: 18px; }
+            td { border-bottom: 1px solid #d8dee8; padding: 12px; }
+            .net { font-size: 22px; font-weight: 800; color: #087f5b; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>PeopleCore HR Payslip</h1>
+            <p>${item.month}</p>
+          </div>
+          <p><strong>Employee:</strong> ${item.employee.name}</p>
+          <p><strong>Department:</strong> ${item.employee.department}</p>
+          <table>
+            <tr><td>Basic Salary</td><td>Rs. ${item.basicSalary.toLocaleString()}</td></tr>
+            <tr><td>Allowances</td><td>Rs. ${item.allowances.toLocaleString()}</td></tr>
+            <tr><td>Leave Days</td><td>${item.leaveDays}</td></tr>
+            <tr><td>Deductions</td><td>Rs. ${item.deductions.toLocaleString()}</td></tr>
+            <tr><td>Net Salary</td><td class="net">Rs. ${item.netSalary.toLocaleString()}</td></tr>
+          </table>
+        </body>
+      </html>
+    `;
     const blob = new Blob([html], { type: "text/html" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -49,7 +119,7 @@ const Payroll = () => {
         {canProcess && (
           <>
             <input type="month" value={month} onChange={(event) => setMonth(event.target.value)} />
-            <button onClick={processPayroll}>Process payroll</button>
+            <button onClick={processPayroll} disabled={processing}>{processing ? "Processing..." : "Process payroll"}</button>
           </>
         )}
         <select value={selectedEmployee} onChange={(event) => setSelectedEmployee(event.target.value)}>
@@ -59,9 +129,18 @@ const Payroll = () => {
           ))}
         </select>
       </div>
+      {message && <div className="success">{message}</div>}
+      {error && <div className="alert">{error}</div>}
       <div className="panel">
         <h3>Payroll History</h3>
-        <div className="table-wrap">
+        {loading ? (
+          <div className="empty-state">Loading payroll history...</div>
+        ) : !selectedEmployee ? (
+          <div className="empty-state">Select an employee to view payroll.</div>
+        ) : payroll.length === 0 ? (
+          <div className="empty-state">No payroll records found.</div>
+        ) : (
+          <div className="table-wrap">
           <table>
             <thead>
               <tr>
@@ -89,6 +168,7 @@ const Payroll = () => {
             </tbody>
           </table>
         </div>
+        )}
       </div>
     </section>
   );

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import api from "../api/client";
 import { useAuth } from "../context/AuthContext.jsx";
 
@@ -7,24 +7,56 @@ const Leaves = () => {
   const [leaves, setLeaves] = useState([]);
   const [form, setForm] = useState({ fromDate: "", toDate: "", type: "Casual", reason: "" });
   const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-  const loadLeaves = () => api.get("/leaves").then((response) => setLeaves(response.data));
+  const loadLeaves = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    setError("");
+    try {
+      const response = await api.get("/leaves");
+      setLeaves(response.data);
+    } catch (err) {
+      setError(err.response?.data?.message || "Unable to load leave requests");
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     loadLeaves();
-  }, []);
+    const timer = window.setInterval(() => loadLeaves(true), 15000);
+    return () => window.clearInterval(timer);
+  }, [loadLeaves]);
 
   const applyLeave = async (event) => {
     event.preventDefault();
-    await api.post("/leaves", form);
-    setForm({ fromDate: "", toDate: "", type: "Casual", reason: "" });
-    setMessage("Leave request submitted");
-    loadLeaves();
+    setMessage("");
+    setError("");
+    setSaving(true);
+    try {
+      await api.post("/leaves", form);
+      setForm({ fromDate: "", toDate: "", type: "Casual", reason: "" });
+      setMessage("Leave request submitted");
+      loadLeaves(true);
+    } catch (err) {
+      setError(err.response?.data?.message || "Unable to submit leave request");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const reviewLeave = async (id, status) => {
-    await api.put(`/leaves/${id}`, { status });
-    loadLeaves();
+    setMessage("");
+    setError("");
+    try {
+      await api.put(`/leaves/${id}`, { status });
+      setMessage(`Leave ${status.toLowerCase()}`);
+      loadLeaves(true);
+    } catch (err) {
+      setError(err.response?.data?.message || "Unable to review leave request");
+    }
   };
 
   return (
@@ -46,12 +78,20 @@ const Leaves = () => {
             </select>
             <textarea placeholder="Reason" value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} required />
             {message && <div className="success">{message}</div>}
-            <button>Submit request</button>
+            {error && <div className="alert">{error}</div>}
+            <button disabled={saving}>{saving ? "Submitting..." : "Submit request"}</button>
           </form>
         )}
         <div className="panel wide">
           <h3>Leave Requests</h3>
-          <div className="table-wrap">
+          {user.role !== "Employee" && message && <div className="success">{message}</div>}
+          {user.role !== "Employee" && error && <div className="alert">{error}</div>}
+          {loading ? (
+            <div className="empty-state">Loading leave requests...</div>
+          ) : leaves.length === 0 ? (
+            <div className="empty-state">No leave requests found.</div>
+          ) : (
+            <div className="table-wrap">
             <table>
               <thead>
                 <tr>
@@ -88,6 +128,7 @@ const Leaves = () => {
               </tbody>
             </table>
           </div>
+          )}
         </div>
       </div>
     </section>

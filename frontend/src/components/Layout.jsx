@@ -1,5 +1,6 @@
 import { Building2, ClipboardCheck, FileBarChart, LogOut, ReceiptText, ShieldCheck, Users } from "lucide-react";
 import { NavLink, Outlet } from "react-router-dom";
+import BrandLogo from "./BrandLogo.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 
 const navItems = [
@@ -14,17 +15,12 @@ const navItems = [
 const Layout = () => {
   const { user, logout } = useAuth();
   const visibleItems = navItems.filter((item) => item.roles.includes(user.role));
+  const displayName = user.employee?.name || user.email;
 
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="brand">
-          <div className="brand-mark">LP</div>
-          <div>
-            <strong>Leave Payroll</strong>
-            <span>Enterprise Suite</span>
-          </div>
-        </div>
+        <BrandLogo />
         <nav>
           {visibleItems.map((item) => {
             const Icon = item.icon;
@@ -45,9 +41,10 @@ const Layout = () => {
         <header className="topbar">
           <div>
             <span className="muted">Signed in as</span>
-            <h1>{user.role}</h1>
+            <h1>{displayName}</h1>
+            <p>{user.role}</p>
           </div>
-          <div className="profile-chip">{user.email}</div>
+          <div className="profile-chip">{user.role}</div>
         </header>
         <Outlet />
       </main>

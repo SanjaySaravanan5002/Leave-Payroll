@@ -1,13 +1,28 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import api from "../api/client";
 import StatCard from "../components/StatCard.jsx";
 
 const Reports = () => {
   const [summary, setSummary] = useState(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  const loadReports = useCallback((silent = false) => {
+    if (!silent) setLoading(true);
+    api
+      .get("/reports/summary")
+      .then((response) => setSummary(response.data))
+      .catch((err) => setError(err.response?.data?.message || "Unable to load reports"))
+      .finally(() => {
+        if (!silent) setLoading(false);
+      });
+  }, []);
 
   useEffect(() => {
-    api.get("/reports/summary").then((response) => setSummary(response.data));
-  }, []);
+    loadReports();
+    const timer = window.setInterval(() => loadReports(true), 15000);
+    return () => window.clearInterval(timer);
+  }, [loadReports]);
 
   return (
     <section>
@@ -15,6 +30,7 @@ const Reports = () => {
         <h2>Reports</h2>
         <p>Monthly payroll and leave statistics.</p>
       </div>
+      {error && <div className="alert">{error}</div>}
       <div className="stats-grid">
         <StatCard label="Employees" value={summary?.employees ?? "..."} />
         <StatCard label="Pending Leave" value={summary?.leaves?.pending ?? "..."} tone="warning" />
@@ -23,7 +39,12 @@ const Reports = () => {
       </div>
       <div className="panel">
         <h3>Latest Payroll</h3>
-        <div className="table-wrap">
+        {loading ? (
+          <div className="empty-state">Loading latest payroll...</div>
+        ) : !summary?.payroll.latest.length ? (
+          <div className="empty-state">No payroll records found.</div>
+        ) : (
+          <div className="table-wrap">
           <table>
             <thead>
               <tr>
@@ -45,6 +66,7 @@ const Reports = () => {
             </tbody>
           </table>
         </div>
+        )}
       </div>
     </section>
   );

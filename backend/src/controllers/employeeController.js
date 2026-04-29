@@ -4,6 +4,15 @@ const asyncHandler = require("../utils/asyncHandler");
 const { ROLES } = require("../utils/constants");
 const { logAudit } = require("../services/auditService");
 
+const ensureCanManageRole = (req, res, role) => {
+  if (req.user.role === ROLES.ADMIN) return;
+
+  if (role !== ROLES.EMPLOYEE) {
+    res.status(403);
+    throw new Error("HR Managers can only manage Employee accounts");
+  }
+};
+
 const getEmployees = asyncHandler(async (req, res) => {
   const employees = await Employee.find().sort({ createdAt: -1 }).populate("user", "email role isActive");
   res.json(employees);
@@ -20,18 +29,33 @@ const getEmployeeById = asyncHandler(async (req, res) => {
 
 const createEmployee = asyncHandler(async (req, res) => {
   const { name, email, department, salary, allowances = 0, joiningDate, role = ROLES.EMPLOYEE, password = "Employee@123" } = req.body;
+  ensureCanManageRole(req, res, role);
+
+  const existingUser = await User.findOne({ email });
+  const existingEmployee = await Employee.findOne({ email });
+  if (existingUser || existingEmployee) {
+    res.status(409);
+    throw new Error("Email already registered");
+  }
 
   const user = await User.create({ email, password, role });
-  const employee = await Employee.create({
-    user: user._id,
-    name,
-    email,
-    department,
-    salary,
-    allowances,
-    joiningDate,
-    role
-  });
+  let employee;
+
+  try {
+    employee = await Employee.create({
+      user: user._id,
+      name,
+      email,
+      department,
+      salary,
+      allowances,
+      joiningDate,
+      role
+    });
+  } catch (error) {
+    await User.findByIdAndDelete(user._id);
+    throw error;
+  }
 
   user.employee = employee._id;
   await user.save();
@@ -53,6 +77,9 @@ const updateEmployee = asyncHandler(async (req, res) => {
     res.status(404);
     throw new Error("Employee not found");
   }
+
+  ensureCanManageRole(req, res, employee.role);
+  if (req.body.role !== undefined) ensureCanManageRole(req, res, req.body.role);
 
   const allowed = ["name", "department", "salary", "allowances", "joiningDate", "role", "isActive", "leaveBalance"];
   allowed.forEach((field) => {

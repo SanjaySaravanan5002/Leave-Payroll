@@ -16,13 +16,20 @@ const App = () => (
       <Route element={<Layout />}>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/employees" element={<Employees />} />
+        <Route element={<ProtectedRoute roles={["Admin", "HR Manager"]} />}>
+          <Route path="/employees" element={<Employees />} />
+        </Route>
         <Route path="/leaves" element={<Leaves />} />
         <Route path="/payroll" element={<Payroll />} />
-        <Route path="/reports" element={<Reports />} />
-        <Route path="/audit-logs" element={<AuditLogs />} />
+        <Route element={<ProtectedRoute roles={["Admin", "HR Manager"]} />}>
+          <Route path="/reports" element={<Reports />} />
+        </Route>
+        <Route element={<ProtectedRoute roles={["Admin"]} />}>
+          <Route path="/audit-logs" element={<AuditLogs />} />
+        </Route>
       </Route>
     </Route>
+    <Route path="*" element={<Navigate to="/dashboard" replace />} />
   </Routes>
 );
 

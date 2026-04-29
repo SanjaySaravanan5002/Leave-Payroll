@@ -1,6 +1,6 @@
-# Leave and Payroll Management System
+# PeopleCore HR
 
-A complete MERN stack enterprise application for employee management, leave workflows, monthly payroll processing, payslips, reports, audit logs, email notifications, and RBAC dashboards.
+A complete MERN stack workforce operations application for employee management, leave workflows, monthly payroll processing, payslips, reports, audit logs, email notifications, and RBAC dashboards.
 
 ## Tech Stack
 
@@ -100,4 +100,3 @@ Net Salary = Basic Salary + Allowances - Leave Deductions
 
 - Cron automatically processes payroll on the first day of every month at 02:00.
 - Payslips can be downloaded from the frontend as HTML files.
-
